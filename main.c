@@ -7,8 +7,8 @@
 #define MEMORY_SIZE 4096
 #define REGISTERS 16
 #define STACK_SIZE 32
-#define SCREEN_HEIGHT 64
-#define SCREEN_WIDTH 32
+#define SCREEN_HEIGHT 32
+#define SCREEN_WIDTH 64
 #define MEMORY_OFFSET 0x200
 
 #define SCALE 8.0f
@@ -19,7 +19,7 @@ typedef struct Emulator {
   uint16_t pc;
   uint16_t stack[STACK_SIZE];
   uint16_t I;
-  int screen[SCREEN_HEIGHT][SCREEN_WIDTH];
+  int screen[SCREEN_WIDTH][SCREEN_HEIGHT];
 } Emulator;
 
 typedef struct FetchResponse {
@@ -41,17 +41,17 @@ void CleanEmulator(Emulator *);
 FetchResponse Fetch(Emulator *);
 DecodeResponse Decode(Emulator *);
 void Execute(Emulator *);
-void draw(Emulator *, Image *);
-void drawSprite(Emulator *, uint8_t VX, uint8_t VY, uint8_t N, Image *);
+void draw(Emulator *);
+void drawSprite(Emulator *, uint8_t VX, uint8_t VY, uint8_t N);
 int LoadRom(Emulator *self, const char *filename);
 
 Image image;
 Texture2D texture;
 
 int main(void) {
-  const int screenWidth = 64 * SCALE;
-  const int screenHeight = 32 * SCALE;
-  InitWindow(screenWidth, screenHeight, "chip8-emulator-c");
+  const int screenWidth = SCREEN_WIDTH;
+  const int screenHeight = SCREEN_HEIGHT;
+  InitWindow(screenWidth * SCALE, screenHeight * SCALE, "chip8-emulator-c");
 
   image = GenImageColor(screenWidth, screenHeight, BLACK);
   texture = LoadTextureFromImage(image);
@@ -86,7 +86,7 @@ FetchResponse Fetch(Emulator *self) {
   FetchResponse fr;
   fr.b0 = self->memory[self->pc];
   fr.b1 = self->memory[self->pc + 1];
-  printf("Fetched [0x%02X 0x%02X] \n", fr.b0, fr.b1);
+  // printf("Fetched [0x%02X 0x%02X] \n", fr.b0, fr.b1);
   self->pc += 2;
   return fr;
 }
@@ -132,7 +132,7 @@ void Execute(Emulator *self) {
     break;
 
   case 0x7:
-    self->registers[dr.X] = (self->registers[dr.X] + dr.NN);
+    self->registers[dr.X] += dr.NN;
     break;
 
   case 0xA:
@@ -140,9 +140,7 @@ void Execute(Emulator *self) {
     break;
 
   case 0xD:
-    self->registers[0xF] = 0;
-    drawSprite(self, self->registers[dr.X], self->registers[dr.Y], dr.N,
-               &image);
+    drawSprite(self, self->registers[dr.X], self->registers[dr.Y], dr.N);
     break;
 
   default:
@@ -151,18 +149,17 @@ void Execute(Emulator *self) {
   }
 }
 
-void draw(Emulator *emulator, Image *screenImage) {
-  for (int x = 0; x < SCREEN_HEIGHT; x++) {
-    for (int y = 0; y < SCREEN_WIDTH; y++) {
+void draw(Emulator *emulator) {
+  for (int x = 0; x < SCREEN_WIDTH; x++) {
+    for (int y = 0; y < SCREEN_HEIGHT; y++) {
       if (emulator->screen[x][y] > 0) {
-        ImageDrawPixel(screenImage, (int)x, (int)y, WHITE);
+        ImageDrawPixel(&image, (int)x, (int)y, WHITE);
       }
     }
   }
 }
 
-void drawSprite(Emulator *emulator, uint8_t VX, uint8_t VY, uint8_t N,
-                Image *screenImage) {
+void drawSprite(Emulator *emulator, uint8_t VX, uint8_t VY, uint8_t N) {
   uint8_t x = VX % SCREEN_WIDTH;
   uint8_t y = VY % SCREEN_HEIGHT;
   emulator->registers[0xF] = 0;
@@ -173,8 +170,8 @@ void drawSprite(Emulator *emulator, uint8_t VX, uint8_t VY, uint8_t N,
     for (uint8_t col = 0; col < 8; col++) {
       for (uint8_t bit = 0; bit < 8; bit++) {
         if (col == bit && (spriteByte & (1 << (7 - bit)))) {
-          uint8_t pixelX = (x + col) % SCREEN_WIDTH;
-          uint8_t pixelY = (y + row) % SCREEN_HEIGHT;
+          uint8_t pixelX = (x + col) % UINT8_C(SCREEN_WIDTH);
+          uint8_t pixelY = (y + row) % UINT8_C(SCREEN_HEIGHT);
 
           if (emulator->screen[pixelX][pixelY] == 1) {
             emulator->registers[0xF] = 1;
@@ -186,7 +183,7 @@ void drawSprite(Emulator *emulator, uint8_t VX, uint8_t VY, uint8_t N,
     }
   }
 
-  draw(emulator, screenImage);
+  draw(emulator);
 }
 
 int LoadRom(Emulator *self, const char *filename) {
